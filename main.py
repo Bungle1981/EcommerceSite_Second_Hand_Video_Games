@@ -6,6 +6,8 @@ from flask_login import UserMixin, login_user, LoginManager, login_required, cur
 from werkzeug.security import generate_password_hash, check_password_hash
 import stripe
 import os
+from sqlalchemy.orm import relationship
+from sqlalchemy import ForeignKey
 
 app = Flask(__name__)
 Bootstrap(app)
@@ -18,7 +20,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = "sqlite:///Products.db"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False #prevents some warnings
 db = SQLAlchemy(app)
 
-class Product(UserMixin.Model):
+class Product(UserMixin, db.Model):
     __tablename__ = "products"
     id = db.Column(db.Integer, primary_key=True)
     product_name = db.Column(db.String(250), nullable=False)
@@ -33,6 +35,13 @@ class User(UserMixin, db.Model):
     name = db.Column(db.String(250), nullable=False)
     emailaddress = db.Column(db.String(250), unique=True, nullable=False)
     password = db.Column(db.String(250), nullable=False)
+
+# class Order(UserMixin, db.Model):
+#     __tablename__ = "orders"
+#     order_id = db.Column(db.Integer, primary_key=True)
+#     customer_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+#     customer = relationship("User", back_populates="orders")
+#     order_items = relationship("Product", back_populates="orders")
 
 db.create_all()
 
@@ -119,7 +128,7 @@ def ShoppingCart():
     TotalPrice = 0.0
     basket_items = 0
     if "cart" in session:
-        basket_items = len(session["cart"])
+        # basket_items = len(session["cart"])
         dict_of_items = {}
         for item in session["cart"]:
             product = Product.query.get(item)
@@ -128,6 +137,17 @@ def ShoppingCart():
                 dict_of_items[product.id]["qty"] += 1
             else:
                 dict_of_items[product.id] = {"product_ID": product.id, "img_url": product.img_url, "qty": 1, "name": product.product_name, "price": product.price}
+        for item in session["cart"]:
+            product = Product.query.get(item)
+            if dict_of_items[product.id]["qty"] > product.stock_volume:
+                difference = dict_of_items[product.id]["qty"] - product.stock_volume
+                TotalPrice -= difference * dict_of_items[product.id]["price"]
+                dict_of_items[product.id]["qty"] = product.stock_volume
+                flash("Not enough items in stock. Basket items adjusted to maximum available!")
+        session["cart"] = []
+        for item in dict_of_items:
+            session["cart"].append(dict_of_items[item]["product_ID"])
+        basket_items = len(session["cart"])
         TotalPrice = round(TotalPrice, 2)
     else:
         dict_of_items = {}
@@ -165,8 +185,15 @@ def create_checkout_session():
 
 @app.route('/Success')
 def payment_success():
+    for item in session["cart"]:
+        product = Product.query.get(item)
+        product.stock_volume -= 1
+        db.session.commit()
+    # newOrder = Order(customer=current_user,
+    #     )
+    # db.session.add(newOrder)
+    # db.session.commit()
     session.pop('cart', None)
-    # Create new order entry in database here - linked with product and user table.
     return render_template('Success.html')
 
 @app.route('/logout')
