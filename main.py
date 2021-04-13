@@ -6,8 +6,7 @@ from flask_login import UserMixin, login_user, LoginManager, login_required, cur
 from werkzeug.security import generate_password_hash, check_password_hash
 import stripe
 import os
-from sqlalchemy.orm import relationship
-from sqlalchemy import ForeignKey
+
 
 app = Flask(__name__)
 Bootstrap(app)
